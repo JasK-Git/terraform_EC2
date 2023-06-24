@@ -18,22 +18,13 @@ provider "aws" {
 data "aws_ami" "ubuntu" {
   most_recent = true
 
-  owners = var.ami_owner #["850267594901"] # Canonical
-}
-
-resource "aws_instance" "EC2instance" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = var.instance-type
-
-  tags = {
-    Name = "Terraform instance"
-  }
+  owners = var.ami_owner
 }
 
 # Configure SSH key pair
-resource "aws_key_pair" "deployer" {
-  key_name   = "deployer-key"
-  public_key = var.SSH-public-key
+resource "aws_key_pair" "genkey" {
+  key_name   = "pub-key"
+  public_key = "${file(var.ssh-public-key)}"
 }
 
 # Configure VPC
@@ -51,12 +42,6 @@ resource "aws_subnet" "subnet" {
   }
 }
 
-# Create association between subnet and VPC
-#resource "aws_vpc_ipv4_cidr_block_association" "secondary_cidr" {
-#  vpc_id     = aws_vpc.vpc.id
-# cidr_block = "192.168.0.0/28"
-#}
-
 # Configure security group for EC2 instance
 resource "aws_security_group" "allow_app_traffic" {
   name        = "allow_app_traffic"
@@ -70,7 +55,13 @@ resource "aws_security_group" "allow_app_traffic" {
     protocol         = "tcp"
     cidr_blocks      = [aws_vpc.vpc.cidr_block]
   }
-
+  ingress  {
+    description    = "allow port SSH"
+    from_port      = "22"
+    to_port        = "22"
+    protocol       = "tcp"
+    cidr_blocks    = ["0.0.0.0/0"]
+  }
   egress {
     from_port        = 0
     to_port          = 0
@@ -83,3 +74,32 @@ resource "aws_security_group" "allow_app_traffic" {
   }
 }
 
+#the below mentioned resource was initially above 'Configure SSH Key pair' section. added key_name attribute to this resource to add public key to instance
+resource "aws_instance" "ec2instance" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = var.instance-type
+  associate_public_ip_address = "true"
+  key_name = "pub-key"
+  
+    connection {
+      type = "ssh"
+      host = aws_instance.ec2instance.public_dns
+      private_key = "${file(var.ssh-private-key)}"
+      user = "ubuntu"
+    }
+  
+  provisioner "local-exec" {
+    command = <<EOT
+    sleep 120 && \
+    > hosts && \
+    echo "[ansibletarget]" | tee -a hosts && \
+    echo "${aws_instance.ec2instance.public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=${var.ssh-private-key}" | tee -a hosts && \
+    export ANSIBLE_HOST_KEY_CHECKING=False && \
+    echo "${aws_instance.ec2instance.public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=${var.ssh-private-key}" | tee -a hosts && \
+    export ANSIBLE_HOST_KEY_CHECKING=False && \
+    ansible-playbook -u ubuntu --private-key ${var.ssh-private-key} -i hosts roles.yml
+  EOT
+  }
+
+  depends_on = [aws_instance.ec2instance]
+}
