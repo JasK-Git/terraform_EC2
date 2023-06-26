@@ -74,7 +74,6 @@ resource "aws_security_group" "allow_app_traffic" {
   }
 }
 
-#the below mentioned resource was initially above 'Configure SSH Key pair' section. added key_name attribute to this resource to add public key to instance
 resource "aws_instance" "ec2instance" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = var.instance-type
@@ -93,9 +92,9 @@ resource "aws_instance" "ec2instance" {
     sleep 120 && \
     > hosts && \
     echo "[ansibletarget]" | tee -a hosts && \
-    echo "${aws_instance.ec2instance.public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=${var.ssh-private-key}" | tee -a hosts && \
+    echo "${aws_instance.ec2instance.public_ip} ansible_user= ansible_ssh_private_key_file=${var.ssh-private-key}" | tee -a hosts && \
     export ANSIBLE_HOST_KEY_CHECKING=False && \
-    echo "${aws_instance.ec2instance.public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=${var.ssh-private-key}" | tee -a hosts && \
+    echo "${aws_instance.ec2instance.public_ip} ansible_user= ansible_ssh_private_key_file=${var.ssh-private-key}" | tee -a hosts && \
     export ANSIBLE_HOST_KEY_CHECKING=False && \
     ansible-playbook -u ubuntu --private-key ${var.ssh-private-key} -i hosts roles.yml
   EOT
